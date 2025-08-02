@@ -1,4 +1,4 @@
-fetch('https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/gviz/tq?tqx=out:json')
+fetch('https://docs.google.com/spreadsheets/d/1jQt7u1lA5TM87TOntexS04UX8j-RdUtYBH8iCiMEV4o/gviz/tq?tqx=out:json')
   .then(res => res.text())
   .then(text => {
     const json = JSON.parse(text.substr(47).slice(0, -2));
