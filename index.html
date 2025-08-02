@@ -1,20 +1,209 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Google Sheet to Website</title>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monthly Donation Totals</title>
   <style>
-    table, th, td {
-      border: 1px solid black;
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    h2 {
+      text-align: center;
+      color: #007acc;
+      font-size: 1.4rem;
+      margin: 20px 0;
+    }
+
+    #tableWrapper {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 600px;
       border-collapse: collapse;
-      padding: 8px;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      border-bottom: 1px solid #ddd;
+      padding: 8px 12px;
+      text-align: left;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+
+    th {
+      background-color: #343a40;
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    .totals {
+      padding: 15px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #fff;
+      width: 100%;
+      max-width: 350px;
+      overflow-y: auto;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin: 20px auto;
+    }
+
+    .totals strong {
+      font-size: 1.1rem;
+    }
+
+    .totals ul {
+      padding-left: 20px;
+      margin-top: 10px;
+    }
+
+    .totals li {
+      margin-bottom: 6px;
+      font-size: 0.95rem;
+    }
+
+    .error {
+      color: red;
+      text-align: center;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+
+    @media screen and (max-width: 768px) {
+      h2 {
+        font-size: 1.2rem;
+      }
+
+      table {
+        font-size: 0.9rem;
+        min-width: unset;
+      }
+
+      th, td {
+        padding: 6px 8px;
+        font-size: 0.85rem;
+      }
+
+      .totals {
+        padding: 12px;
+        max-width: 100%;
+      }
+    }
+
+    @media screen and (max-width: 480px) {
+      th, td {
+        font-size: 0.8rem;
+      }
+
+      .totals li {
+        font-size: 0.85rem;
+      }
     }
   </style>
 </head>
 <body>
-  <h2>Data from Google Sheet</h2>
-  <table id="dataTable"></table>
+  <div id="tableWrapper">
+    <table id="dataTable"></table>
+  </div>
 
-  <script src="script.js"></script>
+  <div class="totals" id="monthlyTotals"></div>
+  <div class="error" id="errorBox"></div>
+
+  <script>
+    const SHEET_ID = '1jQt7u1lA5TM87TOntexS04UX8j-RdUtYBH8iCiMEV4o';
+    const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
+
+    fetch(URL)
+      .then(response => {
+        if (!response.ok) throw new Error(`Network error: ${response.status}`);
+        return response.text();
+      })
+      .then(text => {
+        const json = JSON.parse(text.substring(47).slice(0, -2));
+        const table = document.getElementById('dataTable');
+        const cols = json.table.cols;
+        const rows = json.table.rows;
+
+        const headerRow = table.insertRow();
+        cols.forEach(col => {
+          const th = document.createElement('th');
+          th.textContent = col.label || 'Unnamed';
+          headerRow.appendChild(th);
+        });
+
+        const monthlyTotals = {};
+        const limitedRows = rows.slice().reverse().slice(0, 50); // latest 50 rows
+
+        limitedRows.forEach(row => {
+          const tr = table.insertRow();
+          row.c.forEach(cell => {
+            const td = tr.insertCell();
+            td.textContent = cell ? (cell.f || cell.v) : '';
+          });
+
+          const dateCell = row.c[1];
+          const amountCell = row.c[2];
+
+          if (dateCell && amountCell) {
+            try {
+              const dateRaw = dateCell.v;
+              let d;
+              if (typeof dateRaw === 'string' && dateRaw.startsWith("Date(")) {
+                const parts = dateRaw.match(/\d+/g);
+                if (parts && parts.length >= 3) {
+                  d = new Date(parts[0], parts[1], parts[2]);
+                }
+              }
+
+              if (d instanceof Date && !isNaN(d)) {
+                const ym = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                const amount = parseFloat(amountCell.v) || 0;
+                monthlyTotals[ym] = (monthlyTotals[ym] || 0) + amount;
+              }
+            } catch (e) {
+              console.warn("⚠️ Date parse error", e);
+            }
+          }
+        });
+
+        const totalsDiv = document.getElementById("monthlyTotals");
+        const months = Object.keys(monthlyTotals).sort().slice(-10).reverse();
+        totalsDiv.innerHTML = "<strong>🧮 Monthly Totals (latest 10):</strong><ul>" +
+          months.map(month =>
+            `<li>${month}: ₹${monthlyTotals[month]}</li>`
+          ).join('') + "</ul>";
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById('errorBox').textContent = '❌ ' + err.message;
+      });
+  </script>
 </body>
 </html>
